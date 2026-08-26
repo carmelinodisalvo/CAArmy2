@@ -134,55 +134,75 @@
     </div>
   </div>
 
-  <script>
-    const frame = document.getElementById('app-frame');
-    const fallback = document.getElementById('fallback');
-    frame.addEventListener('error', () => {
-      frame.style.display = 'none';
-      fallback.style.display = 'flex';
+ <script>
+  const frame = document.getElementById('app-frame');
+  const fallback = document.getElementById('fallback');
+  frame.addEventListener('error', () => {
+    frame.style.display = 'none';
+    fallback.style.display = 'flex';
+  });
+
+  let deferredPrompt = null;
+  const overlay = document.getElementById('installOverlay');
+  const installBtn = document.getElementById('installBtn');
+  const closeBtn = document.getElementById('closeBtn');
+  const statusMsg = document.getElementById('statusMsg');
+
+  // Verifica se l'app è già installata o aperta in standalone
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+
+  // Rilevamento iOS
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+  if (!isStandalone) {
+    // Gestione Android / Desktop (Chromium)
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      overlay.classList.add('visible');
     });
 
-    let deferredPrompt = null;
-    const overlay = document.getElementById('installOverlay');
-    const installBtn = document.getElementById('installBtn');
-    const closeBtn = document.getElementById('closeBtn');
-    const statusMsg = document.getElementById('statusMsg');
-
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-      || window.navigator.standalone === true;
-
-    if (!isStandalone) {
-      window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
-        overlay.classList.add('visible');
-      });
-    }
-
-    installBtn.addEventListener('click', async () => {
-      if (!deferredPrompt) return;
-      installBtn.disabled = true;
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
+    // Gestione specifica per iOS (Safari non supporta prima install prompt)
+    if (isIOS) {
+      // Mostriamo il popup adattando il messaggio per iOS
+      installBtn.style.display = 'none'; // Nascondiamo il bottone diretto
       statusMsg.style.display = 'block';
-      statusMsg.textContent = outcome === 'accepted'
-        ? 'Installazione in corso…'
-        : 'Va bene, puoi installarla in un altro momento.';
-      deferredPrompt = null;
-      setTimeout(() => overlay.classList.remove('visible'), 1200);
-    });
-
-    closeBtn.addEventListener('click', () => {
-      overlay.classList.remove('visible');
-    });
-
-    window.addEventListener('appinstalled', () => {
-      overlay.classList.remove('visible');
-    });
-
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js');
+      statusMsg.innerHTML = 'Per installare su iOS: tocca il pulsante <strong>Condividi</strong> ⎋ e seleziona <strong>Aggiungi alla schermata Home</strong> ➕.';
+      overlay.classList.add('visible');
     }
-  </script>
+  }
+
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    installBtn.disabled = true;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    
+    statusMsg.style.display = 'block';
+    statusMsg.textContent = outcome === 'accepted'
+      ? 'Installazione in corso…'
+      : 'Puoi installare l\'app in qualsiasi altro momento.';
+      
+    deferredPrompt = null;
+    setTimeout(() => overlay.classList.remove('visible'), 2000);
+  });
+
+  closeBtn.addEventListener('click', () => {
+    overlay.classList.remove('visible');
+  });
+
+  window.addEventListener('appinstalled', () => {
+    overlay.classList.remove('visible');
+    console.log('PWA installata con successo');
+  });
+
+  // Registrazione Service Worker con gestione errori
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => console.log('Service Worker registrato:', reg))
+      .catch(err => console.error('Errore registrazione Service Worker:', err));
+  }
+</script>
 </body>
 </html>
