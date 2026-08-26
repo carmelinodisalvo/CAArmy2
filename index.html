@@ -23,20 +23,24 @@
       color: white;
     }
 
-    /* Overlay scuro */
+    /* L'overlay parte NASCOSTO: compare solo quando Chrome conferma
+       che l'app è davvero installabile (evento beforeinstallprompt) */
     .overlay {
+      display: none;
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.75);
       backdrop-filter: blur(8px);
-      display: flex;
       align-items: center;
       justify-content: center;
       z-index: 9999;
       padding: 20px;
     }
 
-    /* Popup grande */
+    .overlay.visible {
+      display: flex;
+    }
+
     .install-popup {
       background: #1e293b;
       border-radius: 28px;
@@ -106,6 +110,12 @@
       transform: translateY(0);
     }
 
+    .btn-install:disabled {
+      opacity: 0.6;
+      cursor: default;
+      transform: none;
+    }
+
     .btn-close {
       margin-top: 20px;
       background: transparent;
@@ -120,21 +130,28 @@
       color: #94a3b8;
     }
 
-    /* Messaggio se già installata o non supportata */
     .status-message {
       display: none;
       font-size: 15px;
       color: #94a3b8;
       margin-top: 16px;
     }
+
+    /* Schermata neutra mostrata mentre si aspetta/valuta l'installabilità,
+       o su browser che non supportano il prompt nativo (es. redirect diretto) */
+    .plain-loading {
+      font-size: 15px;
+      color: #64748b;
+    }
   </style>
 </head>
 <body>
 
-  <!-- POPUP DI INSTALLAZIONE -->
+  <div class="plain-loading" id="loadingMsg">Caricamento…</div>
+
+  <!-- POPUP DI INSTALLAZIONE (compare solo su Android/Chrome installabile) -->
   <div class="overlay" id="installOverlay">
     <div class="install-popup">
-      <!-- Cambia questo percorso con la tua icona (es. icon-512.png) -->
       <img src="icon-512.png" alt="Icona App" class="app-icon" onerror="this.src='https://via.placeholder.com/110x110/3b82f6/ffffff?text=APP'">
 
       <h1>Installa l'App</h1>
@@ -156,7 +173,7 @@
     // ======================
     // CONFIGURA QUI IL TUO SITO
     // ======================
-    const REDIRECT_URL = "https://script.google.com/macros/s/AKfycbwWKHzllmZh-AglGXdl7RFBtUrF-k_JtmqiHe3RaUeOkimcmjXUuaMtWsVf_6XgzGbIyw/exec";   // ← cambia questo
+    const REDIRECT_URL = "https://script.google.com/macros/s/AKfycbwWKHzllmZh-AglGXdl7RFBtUrF-k_JtmqiHe3RaUeOkimcmjXUuaMtWsVf_6XgzGbIyw/exec";
     // ======================
 
     let deferredPrompt = null;
@@ -164,55 +181,68 @@
     const installBtn = document.getElementById('installBtn');
     const closeBtn = document.getElementById('closeBtn');
     const statusMsg = document.getElementById('statusMsg');
+    const loadingMsg = document.getElementById('loadingMsg');
 
-    // Ascolta l'evento di installazione
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      // Il popup è già visibile
-    });
+    // Se è già aperta come PWA installata → vai subito al sito, niente popup
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
 
-    // Pulsante Installa
+    if (isStandalone) {
+      window.location.replace(REDIRECT_URL);
+    } else {
+      // Su Android/Chrome, se l'app È installabile, questo evento scatta
+      // (di solito entro pochi secondi dal caricamento pagina).
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        loadingMsg.style.display = 'none';
+        overlay.classList.add('visible');
+      });
+
+      // Se dopo un breve tempo l'evento non è scattato, l'app NON è
+      // installabile in questo momento (già installata, browser non
+      // supportato, criteri PWA non soddisfatti, o prompt già rifiutato
+      // di recente): non ha senso mostrare un popup "Installa" che non
+      // farebbe nulla, quindi si passa direttamente al sito.
+      setTimeout(() => {
+        if (!deferredPrompt) {
+          window.location.replace(REDIRECT_URL);
+        }
+      }, 3000);
+    }
+
     installBtn.addEventListener('click', async () => {
-      if (!deferredPrompt) {
-        // Fallback per iOS o browser che non supportano
-        statusMsg.style.display = 'block';
-        statusMsg.textContent = 'Su iPhone: tocca Condividi → Aggiungi a Home';
-        return;
-      }
+      if (!deferredPrompt) return;
 
+      installBtn.disabled = true;
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
-      
-      if (outcome === 'accepted') {
-        statusMsg.style.display = 'block';
-        statusMsg.textContent = 'Installazione in corso...';
-        installBtn.disabled = true;
-      }
-      
+
+      statusMsg.style.display = 'block';
+      statusMsg.textContent = outcome === 'accepted'
+        ? 'Installazione in corso…'
+        : 'Va bene, puoi installarla in un altro momento.';
+
       deferredPrompt = null;
+
+      setTimeout(() => {
+        overlay.classList.remove('visible');
+        window.location.replace(REDIRECT_URL);
+      }, outcome === 'accepted' ? 1200 : 600);
     });
 
-    // Chiudi popup e vai al sito
     closeBtn.addEventListener('click', () => {
-      overlay.style.display = 'none';
+      overlay.classList.remove('visible');
       window.location.replace(REDIRECT_URL);
     });
 
-    // Se l'app è già installata, vai direttamente al sito
     window.addEventListener('appinstalled', () => {
-      overlay.style.display = 'none';
+      overlay.classList.remove('visible');
       setTimeout(() => {
         window.location.replace(REDIRECT_URL);
       }, 800);
     });
 
-    // Se viene aperta già come PWA installata → vai subito al sito
-    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
-      window.location.replace(REDIRECT_URL);
-    }
-
-    // Service Worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js');
     }
