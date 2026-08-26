@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Il mio sito</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#000000">
+  <script>
+    // Reindirizza subito al tuo sito
+    window.location.replace("https://script.google.com/macros/s/AKfycbwWKHzllmZh-AglGXdl7RFBtUrF-k_JtmqiHe3RaUeOkimcmjXUuaMtWsVf_6XgzGbIyw/exec");
+  </script>
+</head>
+<body>
+  <p>Reindirizzamento in corso…</p>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>
